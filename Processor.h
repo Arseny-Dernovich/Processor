@@ -1,5 +1,7 @@
-#define SIZE_REG 5
-#define RAM_SIZE 100
+#define SIZE_REG 8
+#define SIZE_X 100
+#define SIZE_Y 100
+
 struct Header{
     char signature[6];
     int code_size;
@@ -33,7 +35,11 @@ enum CMD {
     CMD_JE = 14 ,
     CMD_JNE = 15 ,
     CMD_RET = 16 ,
-    CMD_CALL = 17
+    CMD_CALL = 17 ,
+    CMD_SQRT = 18 ,
+    CMD_MOD = 19 ,
+
+    CMD_DRAW = 111
 };
 
 enum Type_push_pop {
@@ -43,5 +49,11 @@ enum Type_push_pop {
     ARG_MEM_CONST = 5 ,
     ARG_REG_CONST = 3 ,
     ARG_REG = 2
+};
+
+enum Magic_const  {
+    First_Bit = 1 ,
+    Second_Bit = 2 ,
+    Thirst_Bit = 4
 };
 

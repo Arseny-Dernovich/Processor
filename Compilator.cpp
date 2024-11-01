@@ -1,6 +1,4 @@
 #include "My_features.h"
-#include <stdio.h>
-#include <string.h>
 #include "Processor.h"
 
 #define SIGNATURE "MYCPU"
@@ -22,7 +20,10 @@ int RegisterToNumber (const char* reg_name)
     else if (stricmp (reg_name , "bx") == 0) return 2;
     else if (stricmp (reg_name , "cx") == 0) return 3;
     else if (stricmp (reg_name , "dx") == 0) return 4;
-    else return 0;
+    else if (stricmp (reg_name , "as") == 0) return 5;
+    else if (stricmp (reg_name , "bs") == 0) return 6;
+    else if (stricmp (reg_name , "cs") == 0) return 7;
+    else return -1;
 }
 
 FILE* Open_File (const char* filename_read)
@@ -68,7 +69,7 @@ void Processor_init (Processor* proc , const char* input_filename) {
     }
 
     proc->code_capacity = word_count * 2;
-    proc->code = (int*) calloc (word_count , sizeof (int));
+    proc->code = (int*) calloc (proc->code_capacity , sizeof (int));
     proc->code_size = 0;
     proc->ip = 0;
 }
@@ -133,39 +134,41 @@ int LabelTable_get_address (LabelTable* table , const char* label_name)
     return -1;
 }
 
-int FirstPass(FILE* input_file, LabelTable* labels, Processor* proc)
+int FirstPass (const char * filename , LabelTable* labels , Processor* proc)
 {
-    my_assert(input_file == NULL);
+    my_assert (filename == NULL);
 
+    FILE* input_file = fopen (filename , "r");
     char command[50];
     int current_address = 0;
 
-    while (fscanf(input_file, "%s", command) != EOF) {
-
-        if (command[strlen(command) - 1] == ':') {
-            command[strlen(command) - 1] = '\0';
-            LabelTable_add(labels, command, current_address);
+    while (fscanf(input_file , "%s" , command) != EOF) {
+fprintf(stderr, "command = '%s'\n", command);
+        if (command[strlen (command) - 1] == ':') {
+            printf ("metka: '%s'\n\n" , command);
+            command[strlen (command) - 1] = '\0';
+            LabelTable_add (labels , command , current_address);
         } else {
 
-            if (strncmp(command, "push", 4) == 0 || strncmp(command, "pop", 3) == 0) {
+            if (strncmp (command, "push", 4) == 0 || strncmp (command, "pop", 3) == 0) {
                 char arg[50];
-                fscanf(input_file, "%s", arg);
+                fscanf (input_file , "%s" , arg);
 
-                if (strchr(arg, '+') != NULL) {
-
+                if (strchr (arg , '+') != NULL) {
                     current_address += 4;
-                } else {
 
+                } else {
                     current_address += 3;
                 }
-            } else {
+
+            } else
                 current_address++;
-            }
+
         }
     }
 
-    fclose(input_file);
-    return 0;
+    fclose (input_file);
+    return COMPLETE_VALUE;
 }
 
 
@@ -179,51 +182,49 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
         return -1;
     }
 
-    char command[50];
-    while (fscanf (input_file , "%s" , command) != EOF) {
+    char command[50] = "";
+    while (fscanf (input_file , "%s" , command) != EOF){
+    // fprintf(stderr, "cycle, command = '%s'\n", command);
 
         if (command[strlen (command) - 1] == ':') {
             continue;
 
-        } else if (stricmp(command , "push") == 0) {
-    char token[50];
-    fscanf (input_file , "%s" , token);
+        } else if (stricmp (command , "push") == 0) {
+        char token[50] = {};
+        fscanf (input_file , "%s" , token);
+        if (token[0] == '[') {
+            char inside_brackets[50]= {};
+            sscanf (token , "[%[^]]" , inside_brackets);
 
-    if (token[0] == '[') {
-        char inside_brackets[50];
-        sscanf (token , "[%[^]]]" , inside_brackets);
+            char* plus_sign = strchr (inside_brackets  , '+');
+            if (plus_sign != NULL) {                                          // Память + регистр + константа
+                char reg[10] = {};
+                int value = 0;
 
+                strncpy (reg , inside_brackets , 2 );
+                char* value_start = plus_sign + 1;
+                while (*value_start == ' ') {
+                    value_start++;
+                }
+                value = atoi (value_start);
 
-        char* plus_sign = strchr (inside_brackets  , '+');
-        if (plus_sign != NULL) {                                          // Память + регистр + константа
-            char reg[10] = {0};
-            int value = 0;
+                int reg_number = RegisterToNumber (reg);
+                proc->code[proc->ip++] = CMD_PUSH;
+                proc->code[proc->ip++] = ARG_MEM_REG_CONST;
+                proc->code[proc->ip++] = value;
+                proc->code[proc->ip++] = reg_number;
 
+            } else if (isalpha (inside_brackets[0])) {                        // Память + регистр
+                int reg_number = RegisterToNumber (inside_brackets);
+                proc->code[proc->ip++] = CMD_PUSH;
+                proc->code[proc->ip++] = ARG_MEM_REG;
+                proc->code[proc->ip++] = reg_number;
 
-            strncpy (reg , inside_brackets , 2 );
-            char* value_start = plus_sign + 1;
-            while (*value_start == ' ') {
-                value_start++;
-            }
-            value = atoi (value_start);
-
-            int reg_number = RegisterToNumber (reg);
-            proc->code[proc->ip++] = CMD_PUSH;
-            proc->code[proc->ip++] = ARG_MEM_REG_CONST;
-            proc->code[proc->ip++] = value;
-            proc->code[proc->ip++] = reg_number;
-
-        } else if (isalpha (inside_brackets[0])) {                        // Память + регистр
-            int reg_number = RegisterToNumber(inside_brackets);
-            proc->code[proc->ip++] = CMD_PUSH;
-            proc->code[proc->ip++] = ARG_MEM_REG;
-            proc->code[proc->ip++] = reg_number;
-
-        } else if (isdigit (inside_brackets[0])) {                        // Память + константа
-            int address = atoi (inside_brackets);
-            proc->code[proc->ip++] = CMD_PUSH;
-            proc->code[proc->ip++] = ARG_MEM_CONST;
-            proc->code[proc->ip++] = address;
+            } else if (isdigit (inside_brackets[0])) {                        // Память + константа
+                int address = atoi (inside_brackets);
+                proc->code[proc->ip++] = CMD_PUSH;
+                proc->code[proc->ip++] = ARG_MEM_CONST;
+                proc->code[proc->ip++] = address;
         }
 
         } else if (isdigit (token[0])) {                                   // Константа
@@ -235,9 +236,8 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
         } else {                                                          // Аргумент - регистр или регистр + константа
             char* plus_sign = strchr (token , '+');
             if (plus_sign != NULL) {
-                char reg[10] = {0};
+                char reg[10] = {};
                 int value = 0;
-
 
                 strncpy (reg , token , plus_sign - token);
                 char* value_start = plus_sign + 1;
@@ -260,23 +260,25 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
         }
 
         } else if (stricmp (command , "pop") == 0) {
-        char token[50];
-        fscanf (input_file , "%s" , token);
+            char token[50] = {};
+            fscanf (input_file , "%s" , token);
 
-        int reg_number = RegisterToNumber (token);
-        if (reg_number != -1) {
-            proc->code[proc->ip++] = CMD_POP;
-            proc->code[proc->ip++] = ARG_REG;
-            proc->code[proc->ip++] = reg_number;
+            int reg_number = RegisterToNumber (token);
+            if (reg_number != -1) {
+                proc->code[proc->ip++] = CMD_POP;
+                proc->code[proc->ip++] = ARG_REG;
+                proc->code[proc->ip++] = reg_number;
         }
 
         else if (token[0] == '[') {
-            char inside_brackets[50];
-            sscanf(token , "[%[^]]]" , inside_brackets);
+            char inside_brackets[50] = {};
+            sscanf (token , "[%[^]]" , inside_brackets);
+
+            //printf ("%s" , inside_brackets);
 
             char* plus_sign = strchr (inside_brackets , '+');
             if (plus_sign != NULL) {
-                char reg[10] = {0};
+                char reg[10] = {};
                 int value = 0;
 
                 strncpy (reg , inside_brackets , 2);
@@ -285,6 +287,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
                     value_start++;
                 }
                 value = atoi (value_start);
+                //printf ("reg %s" , reg);
 
                 int reg_number = RegisterToNumber (reg);
                 proc->code[proc->ip++] = CMD_POP;
@@ -307,10 +310,8 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
         } else
             printf ("Ошибка: неверный аргумент для pop!\n");
 
-
-
         } else if (stricmp (command , "call") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -321,6 +322,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
         proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "ret") == 0) {
+        //  fprintf (stderr ,"HUILO1\n");
             proc->code[proc->ip++] = CMD_RET;
 
         } else if (stricmp (command , "add") == 0) {
@@ -342,7 +344,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = CMD_HLT;
 
         } else if (stricmp (command , "jmp") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -353,7 +355,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "ja") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -364,7 +366,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "jae") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -375,7 +377,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "jb") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -386,7 +388,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "jbe") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -397,7 +399,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "je") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -408,7 +410,7 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             proc->code[proc->ip++] = address;
 
         } else if (stricmp (command , "jne") == 0) {
-            char label[LABEL_NAME_MAX];
+            char label[LABEL_NAME_MAX] = "";
             fscanf (input_file , "%s" , label);
             int address = LabelTable_get_address (labels , label);
             if (address == -1) {
@@ -417,57 +419,46 @@ int Compile (const char* input_filename , Processor* proc , LabelTable* labels)
             }
             proc->code[proc->ip++] = CMD_JNE;
             proc->code[proc->ip++] = address;
-        }
 
+        } else if (stricmp (command , "draw") == 0) {
+            proc->code[proc->ip++] = CMD_DRAW;
+        } else if (stricmp (command , "sqrt") == 0) {
+            proc->code[proc->ip++] = CMD_SQRT;
+        } else if (stricmp (command , "mod") == 0) {
+            proc->code[proc->ip++] = CMD_MOD;
+        }
     }
 
     proc->header.code_size = proc->ip;
     proc->code_size = proc->ip;
+    my_assert(input_file == NULL);
     fclose (input_file);
     return 0;
 }
 
 
-int main() {
+int main (int argc, char* argv[])
+{
     Processor proc = {};
     LabelTable labels;
-    LabelTable_init(&labels);
+    LabelTable_init (&labels);
 
-    Processor_init(&proc , "text.txt");
+    char* filename = argv[1];
 
-    FILE* input_file = fopen("text.txt" , "r");
+    Processor_init (&proc , filename);
+
+    FILE* input_file = fopen (filename , "r");
     int code_size = 0;
 
-    FirstPass(input_file , &labels , &proc);
+    FirstPass (filename , &labels , &proc);
 
-    Compile("text.txt" , &proc , &labels);
-
-    Processor_save(&proc , "output.txt");
+    Compile (filename , &proc , &labels);
+    fprintf (stderr ,"HUILO\n");
+    Processor_save (&proc , "output.txt");
     Processor_save_bin (&proc  , "output.bin");
 
-    fclose(input_file);
+
+
     return 0;
 }
 
-
-
-
-/*
-int main() {
-    LabelTable table = {};
-    Processor proc = {};
-
-    LabelTable_init(&table);
-    Processor_init(&proc , "text.txt");
-
-    FILE* fp = fopen("text.txt" , "r");
-
-    FirstPass(fp , &table , &proc.code_size);
-    Compile("text.txt" , &proc , &table);
-    Processor_save(&proc , "output.txt");
-
-    fclose(fp);
-
-    return 0;
-}
-*/

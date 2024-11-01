@@ -1,0 +1,95 @@
+push 40
+pop bx
+
+push 5555
+pop cx
+
+push 0
+pop dx
+
+New_Pixel:
+call Rastoyanie
+push bx
+
+jbe Next
+
+push 0
+pop [dx]
+jmp Again
+
+
+Next:
+push 1
+pop [dx]
+
+Again:
+push 1
+push dx
+add
+pop dx
+
+push dx
+push 10000
+jb New_Pixel
+
+draw
+hlt
+
+Rastoyanie:
+push dx
+call RAM_SIZE_X
+
+mod
+
+push cx
+call RAM_SIZE_X
+mod
+
+sub
+
+push dx
+call RAM_SIZE_X
+mod
+
+push cx
+call RAM_SIZE_X
+mod
+
+sub
+
+mul
+
+push dx
+call RAM_SIZE_X
+div
+
+push cx
+call RAM_SIZE_X
+div
+
+sub
+
+push dx
+call RAM_SIZE_X
+div
+
+push cx
+call RAM_SIZE_X
+div
+
+sub
+
+mul
+
+
+
+
+add
+sqrt
+ret
+
+
+
+RAM_SIZE_X:
+push 100
+ret

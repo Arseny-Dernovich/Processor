@@ -1,0 +1,27 @@
+push 7
+pop bx
+
+push 1
+pop ax
+
+Factorial:
+push bx
+push 1
+jb EndFactorial
+
+push ax
+push bx
+mul
+pop ax
+
+push bx
+push 1
+sub
+pop bx
+
+jmp Factorial
+
+EndFactorial:
+push ax
+out
+hlt
